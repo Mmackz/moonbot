@@ -1,5 +1,6 @@
 import re
 import requests
+import logging
 import lib.globals as glob
 from datetime import datetime, timedelta
 from lib.constants import START_SNAPSHOT_DATE, START_SNAPSHOT_ROUND
@@ -26,8 +27,9 @@ def calculate_post_age(post):
 
 def calculate_moon_data():
     # Calculate total moons for the round
+    MOONS_PER_ROUND = 2_500_000
     round_number = calculate_round_number()
-    total_moons_this_round = 2_500_000 * (0.975 ** (round_number - 1))
+    total_moons_this_round = MOONS_PER_ROUND * (0.975 ** (round_number - 1))
     
     # Calculate total karma from the CSV
     total_karma = 0
@@ -35,31 +37,43 @@ def calculate_moon_data():
     csv = csv_handler.read_csv()
     for row in csv[1:]:
         total_karma += int(row[3])
+
+    # Check for division by zero
+    if total_karma == 0:
+        ratio = 0
+    else:
+        ratio = total_moons_this_round / total_karma
     
     return {
         "total_moons": total_moons_this_round,
         "total_karma": total_karma,
-        "ratio": total_moons_this_round / total_karma
+        "ratio": ratio
     }
 
 def download_csv(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        csv_handler = FileHandler("data/snapshot.csv")
-        csv_handler.save_file(response.content)
-        print(f"CSV saved to {csv_handler.filepath}")
-    else:
-        print(f"Failed to download CSV")
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception if the request failed
+        if response.status_code == 200:
+            csv_handler = FileHandler("data/snapshot.csv")
+            if csv_handler.save_file(response.content):
+                logging.info(f"CSV saved to {csv_handler.filepath}")
+            else:
+                logging.error("Failed to save CSV file")
+                raise Exception("Failed to save CSV file")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"An error occurred while downloading the CSV: {e}")
+        raise
 
 def parse_comment(comment, author):    
     comment = comment.strip()
-    
-    # If comment is exactly "!info"
-    if comment == "!info":
+
+    # If comment is exactly "!lookup"
+    if comment == "!lookup":
         return author
 
-    # If comment matches the pattern "!info u/username" or "!info username"
-    match = re.match(r'!info\s+(?:u/)?(\w+)', comment)
+    # If comment matches the pattern "!lookup u/username" or "!lookup username"
+    match = re.match(r'!lookup\s+(?:u/)?([\w-]{3,20})', comment)
     if match:
         return match.group(1)
     

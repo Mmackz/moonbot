@@ -20,7 +20,7 @@ def moon_stats(total_karma, total_moon, ratio):
   
 > The formula is `Your Karma from CSV` * `{round(ratio, 4)}` 
 
-You can comment `!lookup` in this thread to have u/_MoonBot look this up for you. Or you can use `!lookup username` or `!lookup u/username` to lookup another user.  
+You can comment `!lookup` in this thread to have u/_MoonBot look this up for you. Or you can use `!lookup username` to lookup another user.  
   
 > **NOTE:**  *The total amount of Moons to be distributed won't be finalised until next week as 50% of the Moons burned from membership purchases are re-distributed in each round.*  
 
@@ -36,8 +36,7 @@ Would you like to have a say in how MOONs get distributed? Come to r/CryptoCurre
 
 📚 **Want to know more?** 📚  
 
-Check out the [Moon Wiki](https://www.reddit.com/r/CryptoCurrency/wiki/brick)!   
-
+Check out the [Moon Wiki](https://www.reddit.com/r/CryptoCurrency/wiki/moon) or visit the r/CryptoCurrencyMoons subreddit!
 ---  
   
 ^(I am a bot 🤖)"""
