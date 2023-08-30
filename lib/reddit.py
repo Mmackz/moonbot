@@ -1,6 +1,8 @@
 import praw
 import re
 import time
+import logging
+import praw.exceptions
 import lib.globals as glob
 import utils.utils as utils
 from utils.file_handler import FileHandler
@@ -58,8 +60,9 @@ def find_snapshot_post():
                         try:
                             snapshot = post.reply(moon_stats(glob.total_karma, glob.total_moons, glob.karma_ratio))
                             snapshot.mod.distinguish(sticky=True)
+                            logging.info("Stickied moon stats to snapshot post")
                         except Exception as e:
-                            print(f"An error occurred trying to sticky the moon data: {e}")
+                            logging.info(f"An error occurred trying to sticky the moon data: {e}")
                         return
         time.sleep(30)
     # Message bot maintainer if no csv post is found within the time limit
@@ -67,6 +70,7 @@ def find_snapshot_post():
                                         "Please restart the bot once you have manually confirmed the new post is available")
 
 def get_latest_snapshot():
+    logging.info("Getting latest snapshot")
     user = reddit.redditor("communitypoints")
     posts = get_latest_posts(user, limit=4)
     for post in posts:
@@ -76,18 +80,30 @@ def get_latest_snapshot():
                 first_comment = next(iter(post.comments), None)
                 # If no comments or stickied comment
                 if not first_comment or not first_comment.stickied:
-                    # Sticky Round Stats
-                    try:
-                        snapshot = post.reply(moon_stats(glob.total_karma, glob.total_moons, glob.karma_ratio))
-                        snapshot.mod.distinguish(sticky=True)
-                    except Exception as e:
-                        print(f"An error occurred trying to sticky the moon data: {e}")
+                    for _ in range(3):  # Try 3 times in case of failure
+                        try:
+                            snapshot = post.reply(moon_stats(glob.total_karma, glob.total_moons, glob.karma_ratio))
+                            snapshot.mod.distinguish(sticky=True)
+                            logging.info("Stickied moon stats to snapshot post")
+                            break 
+                        except Exception as e:
+                            logging.error(f"An error occurred trying to sticky the moon data: {e}")
+                            time.sleep(5)
+                    else:  
+                        raise Exception("Failed to sticky the moon data after 3 attempts")
                 return
 
 def process_comment(comment):
     author = comment.author
     if (author != REDDIT_USERNAME):
         if (comment.submission.id == glob.snapshot_post_id):
+
+            # Check for help command
+            if comment.body.strip() == "!help":
+                process_help_command(comment)
+                logging.info(f"Processed help command made by u/{author}")
+
+            # Parse comment for lookup command
             username = utils.parse_comment(comment.body, author)
             if username:
                 csv_handler = FileHandler("data/snapshot.csv")
@@ -96,16 +112,28 @@ def process_comment(comment):
                 for row in csv:
                     if row[0].lower() == f"u/{username}".lower():
                         moons = round(int(row[3]) * glob.karma_ratio)
-                        try:
-                            comment.reply(body=info_reply(username, row[3], glob.karma_ratio, moons))
-                        except Exception as e:
-                            print(f"An error occurred when sending a reply: {e}")
+                        logging.info(f"Replying to comment from u/{author}: {username}: {row[3]} karma | ~{moons} moons")
+                        reply_to_comment(comment, info_reply(username, row[3], glob.karma_ratio, moons))
                         found = True
                         break
                 if not found:
-                    try:
-                        comment.reply(body=not_found(username))
-                    except Exception as e:
-                        print(f"An error occurred when sending a reply: {e}")
-        print(author)
+                    logging.info(f"Replying to comment from u/{author}: user not found")
+                    reply_to_comment(comment, not_found(username))
+
         time.sleep(0.5)
+
+def process_help_command(comment):
+    help_text = (
+        "Here are the commands you can use:\n\n"
+        "- `!lookup`: Get your estimated MOON distribution.\n"
+        "- `!lookup username`: Get the estimated MOON distribution for a specific user.\n\n"
+        "This bot is designed to provide information about the MOON distribution in the r/CryptoCurrency subreddit. "
+        "It uses the latest snapshot data to calculate estimates. Please note that these are estimates and the actual distribution may vary."
+    )
+    reply_to_comment(comment, help_text)
+
+def reply_to_comment(comment, body):
+    try:
+        comment.reply(body=body)
+    except praw.exceptions.APIException as e:
+        logging.error(f"An error occurred when sending a reply: {e}")
